@@ -9,10 +9,8 @@ using System.Threading.Tasks;
 
 namespace THSApiClient
 {
-    /// <summary>
-    /// The Patient Object as represented in THS
-    /// </summary>
-    public class Patient
+    
+    public class PatientQuery
     {
         public string patientId { get; set; }
         public string firstName { get; set; }
@@ -21,82 +19,74 @@ namespace THSApiClient
         public DateTimeOffset birthDate { get; set; }
         public string psnDomain { get; set; }
         public string psn { get; set; }
+        public string QueryResponse { get; set; }
+        public string QueryStatusCode { get; set; }
+        public string QueryMessage { get; set; }
+        public string QueryExeption { get; set; }
     };
-    /// <summary>
-    /// THe Query Class - abstracts the Api Query
-    /// </summary>
     public partial class Query
     {
         private System.Net.Http.HttpClient _httpClient;
         private THSApiClient.Client _thsapiclient;
         private PatientRequestBody _patientRequestBody;
 
-        /// <summary>
-        /// Creates a new ApiEndpoint without authentification
-        /// </summary>
-        /// <param name="url"></param>
         public void ApiEndpoint(String url)
         {
             Uri uri = new Uri(url);
             _httpClient = new System.Net.Http.HttpClient();
-            _httpClient.BaseAddress = uri;
-            _thsapiclient = new THSApiClient.Client(_httpClient);
+           // _httpClient.BaseAddress = uri;
+            _thsapiclient = new THSApiClient.Client(uri.ToString(),_httpClient);
         }
-        /// <summary>
-        /// Creates a new ApiEndpoint with authentification
-        /// </summary>
-        /// <param name="url"></param>
-        /// <param name="user"></param>
-        /// <param name="pwd"></param>
         public void ApiEndpoint(String url, string user, string pwd)
         {
             Uri uri = new Uri(url);
             _httpClient = new System.Net.Http.HttpClient();
-            _httpClient.BaseAddress = uri;
+            //_httpClient.BaseAddress = uri;
             var authenticationString = $"{user}:{pwd}";
             var base64String = Convert.ToBase64String(System.Text.Encoding.ASCII.GetBytes(authenticationString));
             _httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic",base64String);
-            _thsapiclient = new THSApiClient.Client(_httpClient);
+            _thsapiclient = new THSApiClient.Client(uri.ToString(),_httpClient) ;
          }
 
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="patientId"></param>
-        public void Patient(string patientId)
+        public void PatientQuery(string patientId)
         {
             _patientRequestBody.PatientId = patientId;
         }
 
-        
-        /// <summary>
-        /// Gets the pseudonym of a patient by patientId
-        /// </summary>
-        /// <param name="patiendId"></param>
-        /// <param name="domain"></param>
-        /// <returns>String of pseudonym</returns>
-        public string GetPseudonymByPatientId(string patiendId, string domain) => _thsapiclient.GetPseudonymForPatientIdAsync(patiendId, domain).Result.Psn;
+        //Liefert nur die PatientenId als string zurück
+        public string GetPseudonymByPatientId(string patiendId, string domain) 
+            => _thsapiclient.GetPseudonymForPatientIdAsync(patiendId, domain).Result.Result.Psn;
 
-        /// <summary>
-        /// Gets or creates a Patient in the THS
-        /// </summary>
-        /// <param name="patient"></param>
-        /// <returns>A Patient Object with psn 
-        /// </returns>
-        public Patient GetOrCreatePatient(Patient patient)
+        //
+        public PatientQuery GetOrCreatePatient(PatientQuery patientquery)
         {
             PatientRequestBody body = new PatientRequestBody();
             
-            body.PatientId = patient.patientId;
-            body.FirstName = patient.firstName;
-            body.LastName = patient.lastName;
-            body.BirthDate = patient.birthDate;
-            body.Gender = patient.gender;
-            body.PsnDomain = patient.psnDomain;
+            body.PatientId = patientquery.patientId;
+            body.FirstName = patientquery.firstName;
+            body.LastName = patientquery.lastName;
+            body.BirthDate = patientquery.birthDate;
+            body.Gender = patientquery.gender;
+            body.PsnDomain = patientquery.psnDomain;
 
-            var ResPat = _thsapiclient.GetOrCreatePatientAsync(body).Result;
-            patient.psn = ResPat.Psn;
-            return patient;
+            
+            try
+            {
+                var ResInfo = _thsapiclient.GetOrCreatePatientAsync(body).Result;
+                var ResPat = ResInfo.Result;
+                if (ResPat.Psn.Length>0) {
+                    patientquery.psn = ResPat.Psn;
+                }
+                patientquery.QueryStatusCode = ResInfo.StatusCode.ToString();
+                return patientquery;
+            }
+            catch(Exception e) {
+                ApiException a = (ApiException)e.InnerException;
+                patientquery.QueryStatusCode = a.StatusCode.ToString() ?? String.Empty;
+                patientquery.QueryMessage = a.Message?.ToString() ?? String.Empty;
+                patientquery.QueryResponse = a.Response?.ToString() ?? String.Empty;
+                patientquery.QueryExeption = a.InnerException?.ToString() ?? String.Empty;
+                return patientquery; }
 
         }
 
